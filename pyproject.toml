@@ -1,0 +1,50 @@
+[tool.black]
+line-length = 88
+target-version = ['py38']
+include = '\.pyi?$'
+exclude = '''
+/(
+    \.eggs
+  | \.git
+  | \.hg
+  | \.mypy_cache
+  | \.tox
+  | \.venv
+  | _build
+  | buck-out
+  | build
+  | dist
+)/
+'''
+
+[build-system]
+requires = ["setuptools>=40.6.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "code-crafter"
+version = "0.1.0"
+description = "Edit Python code with ease."
+authors = [{ name = "Ben Dichter", email = "ben.dichter@catalystneuro.com" }]
+readme = "README.md"
+keywords = ["ast", "refactoring", "code-generation", "python"]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.8",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+]
+dependencies = [
+    "black",
+    "astor",
+]
+
+[tool.setuptools]
+packages.find = { exclude = ["tests", "tests.*"] }
+
+[project.license]
+file = "LICENSE"
