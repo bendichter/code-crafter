@@ -170,7 +170,7 @@ class LiteralDict(Dict):
                 isinstance(key_node, (ast.Constant, ast.Str, ast.Num))
                 and key_node.value == key
             ):
-                return value_node
+                return value_node.value
         return default
 
     def clear(self) -> None:
@@ -197,7 +197,7 @@ class FunctionCallDict(Dict):
     def get(self, key: Any, default: Any = None) -> Any:
         for kw in self.node.keywords:
             if kw.arg == key:
-                return kw.value
+                return kw.value.value
         return default
 
     def clear(self) -> None:

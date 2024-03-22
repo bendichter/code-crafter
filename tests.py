@@ -97,8 +97,7 @@ def test_dict_clear2(sample_document2):
 
 @pytest.mark.parametrize("sample_document", ["sample_document1", "sample_document2"], indirect=True)
 def test_dict_get_existing_key(sample_document):
-    my_dict = sample_document.find_dict('my_dict')
-    assert my_dict.get('key').value == 'value'
+    assert sample_document.find_dict('my_dict').get('key') == 'value'
 
 
 @pytest.mark.parametrize("sample_document", ["sample_document1", "sample_document2"], indirect=True)
@@ -210,6 +209,13 @@ def test_set_remove_existing_element(sample_document):
 def test_set_remove_existing_element2(sample_document2):
     sample_document2.find_set('my_set').remove(3)
     assert "my_set = set(1, 2)" in str(sample_document2)
+
+
+@pytest.mark.parametrize("sample_document", ["sample_document1", "sample_document2"], indirect=True)
+def test_set_remove_non_existing_element(sample_document):
+    my_set = sample_document.find_set('my_set')
+    with pytest.raises(KeyError):
+        my_set.remove(10)
 
 
 def test_set_discard_existing_element(sample_document):
