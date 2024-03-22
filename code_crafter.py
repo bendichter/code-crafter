@@ -1,5 +1,6 @@
+import abc
 import ast
-from typing import Union, Any, Type
+from typing import Union, Any, Type, Optional
 
 import astor
 import black
@@ -81,16 +82,26 @@ class Code:
         """Generic method to find and return a specific type of node."""
         for node in ast.walk(self.tree):
             if (
-                isinstance(node, ast.Assign)
-                and isinstance(node.targets[0], ast.Name)
-                and node.targets[0].id == name
+                    isinstance(node, ast.Assign)
+                    and isinstance(node.targets[0], ast.Name)
+                    and node.targets[0].id == name
             ):
-                if isinstance(node.value, ast.Dict) and node_cls == Dict:
-                    return Dict(node)
+                # Check for dict/list/set function calls
+                if isinstance(node.value, ast.Call):
+                    if node.value.func.id == 'dict' and node_cls == Dict:
+                        return FunctionCallDict(node)
+                    if node.value.func.id == 'list' and node_cls == List:
+                        return FunctionCallList(node)
+                    if node.value.func.id == 'set' and node_cls == Set:
+                        return FunctionCallSet(node)
+
+                # Existing checks for literals
+                elif isinstance(node.value, ast.Dict) and node_cls == Dict:
+                    return LiteralDict(node)
                 elif isinstance(node.value, ast.List) and node_cls == List:
-                    return List(node)
+                    return LiteralList(node)
                 elif isinstance(node.value, ast.Set) and node_cls == Set:
-                    return Set(node)
+                    return LiteralSet(node)
 
     def find_dict(self, name: str) -> "Dict":
         return self._find_node(name, Dict)
@@ -105,9 +116,28 @@ class Code:
         return astor.to_source(self.tree)
 
 
-class Dict:
+class Dict(abc.ABC):
     def __init__(self, node: ast.AST):
         self.node = node
+
+    @abc.abstractmethod
+    def pop(self, key: Any) -> Optional[Any]:
+        raise NotImplementedError("Subclasses should implement this method.")
+
+    @abc.abstractmethod
+    def update(self, dict_: dict = None, **kwargs) -> None:
+        raise NotImplementedError("Subclasses should implement this method.")
+
+    @abc.abstractmethod
+    def get(self, key: Any, default: Any = None) -> Any:
+        raise NotImplementedError("Subclasses should implement this method.")
+
+    @abc.abstractmethod
+    def clear(self) -> None:
+        raise NotImplementedError("Subclasses should implement this method.")
+
+
+class LiteralDict(Dict):
 
     def pop(self, key: str) -> None:
         key_nodes = self.node.value.keys
@@ -149,9 +179,47 @@ class Dict:
         self.node.value.values.clear()
 
 
-class List:
+class FunctionCallDict(Dict):
+
+    def update(self, dict_: dict = None, **kwargs) -> None:
+        raise NotImplementedError("Not implemented for function call dict.")
+
+    def get(self, key: Any, default: Any = None) -> Any:
+        raise NotImplementedError("Not implemented for function call dict.")
+
+    def clear(self) -> None:
+        raise NotImplementedError("Not implemented for function call dict.")
+
+    def pop(self, key: str) -> Optional[Any]:
+        raise NotImplementedError("Not implemented for function call dict.")
+
+
+class List(abc.ABC):
     def __init__(self, node: ast.AST):
         self.node = node
+
+    @abc.abstractmethod
+    def pop(self, index: int) -> None:
+        raise NotImplementedError("Subclasses should implement this method.")
+
+    @abc.abstractmethod
+    def append(self, value: Any) -> None:
+        raise NotImplementedError("Subclasses should implement this method.")
+
+    @abc.abstractmethod
+    def extend(self, values: list) -> None:
+        raise NotImplementedError("Subclasses should implement this method.")
+
+    @abc.abstractmethod
+    def insert(self, index: int, value: Any) -> None:
+        raise NotImplementedError("Subclasses should implement this method.")
+
+    @abc.abstractmethod
+    def remove(self, value: Any) -> None:
+        raise NotImplementedError("Subclasses should implement this method.")
+
+
+class LiteralList(List):
 
     def pop(self, index: int) -> None:
         value = self.node.value.elts[index]
@@ -182,9 +250,52 @@ class List:
         self.node.value.elts.reverse()
 
 
-class Set:
+class FunctionCallList(List):
+
+        def pop(self, index: int) -> None:
+            raise NotImplementedError("Not implemented for function call list.")
+
+        def append(self, value: Any) -> None:
+            raise NotImplementedError("Not implemented for function call list.")
+
+        def extend(self, values: list) -> None:
+            raise NotImplementedError("Not implemented for function call list.")
+
+        def insert(self, index: int, value: Any) -> None:
+            raise NotImplementedError("Not implemented for function call list.")
+
+        def remove(self, value: Any) -> None:
+            raise NotImplementedError("Not implemented for function call list.")
+
+        def clear(self) -> None:
+            raise NotImplementedError("Not implemented for function call list.")
+
+        def reverse(self) -> None:
+            raise NotImplementedError("Not implemented for function call list.")
+
+
+class Set(abc.ABC):
     def __init__(self, node: ast.AST):
         self.node = node
+
+    @abc.abstractmethod
+    def add(self, value: Any) -> None:
+        raise NotImplementedError("Subclasses should implement this method.")
+
+    @abc.abstractmethod
+    def remove(self, value: Any) -> None:
+        raise NotImplementedError("Subclasses should implement this method.")
+
+    @abc.abstractmethod
+    def update(self, values: list) -> None:
+        raise NotImplementedError("Subclasses should implement this method.")
+
+    @abc.abstractmethod
+    def discard(self, value: Any) -> None:
+        raise NotImplementedError("Subclasses should implement this method.")
+
+
+class LiteralSet(Set):
 
     def add(self, value: Any) -> None:
         for elt in self.node.value.elts:
@@ -208,3 +319,18 @@ class Set:
             self.remove(value)
         except KeyError:
             pass
+
+
+class FunctionCallSet(Set):
+
+        def add(self, value: Any) -> None:
+            raise NotImplementedError("Not implemented for function call list.")
+
+        def remove(self, value: Any) -> None:
+            raise NotImplementedError("Not implemented for function call list.")
+
+        def update(self, values: list) -> None:
+            raise NotImplementedError("Not implemented for function call list.")
+
+        def discard(self, value: Any) -> None:
+            raise NotImplementedError("Not implemented for function call list.")

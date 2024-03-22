@@ -13,6 +13,16 @@ my_set = {1, 2, 3}
 
 
 @pytest.fixture
+def sample_document2():
+    source_code = """
+my_list = list(1, 2, 3, 'a')
+my_dict = dict(key='value', my='val', num=42)
+my_set = set(1, 2, 3)
+"""
+    return Code(source_code)
+
+
+@pytest.fixture
 def temp_python_file(tmp_path):
     # Create a temporary Python file for testing
     temp_file = tmp_path / "test_file.py"
