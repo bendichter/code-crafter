@@ -1,5 +1,6 @@
+import abc
 import ast
-from typing import Union, Any, Type
+from typing import Union, Any, Type, Optional
 
 import astor
 import black
@@ -85,12 +86,22 @@ class Code:
                 and isinstance(node.targets[0], ast.Name)
                 and node.targets[0].id == name
             ):
-                if isinstance(node.value, ast.Dict) and node_cls == Dict:
-                    return Dict(node)
+                # Check for dict/list/set function calls
+                if isinstance(node.value, ast.Call):
+                    if node.value.func.id == "dict" and node_cls == Dict:
+                        return FunctionCallDict(node.value)
+                    if node.value.func.id == "list" and node_cls == List:
+                        return FunctionCallList(node.value)
+                    if node.value.func.id == "set" and node_cls == Set:
+                        return FunctionCallSet(node.value)
+
+                # Existing checks for literals
+                elif isinstance(node.value, ast.Dict) and node_cls == Dict:
+                    return LiteralDict(node)
                 elif isinstance(node.value, ast.List) and node_cls == List:
-                    return List(node)
+                    return LiteralList(node)
                 elif isinstance(node.value, ast.Set) and node_cls == Set:
-                    return Set(node)
+                    return LiteralSet(node)
 
     def find_dict(self, name: str) -> "Dict":
         return self._find_node(name, Dict)
@@ -105,10 +116,28 @@ class Code:
         return astor.to_source(self.tree)
 
 
-class Dict:
+class Dict(abc.ABC):
     def __init__(self, node: ast.AST):
         self.node = node
 
+    @abc.abstractmethod
+    def pop(self, key: Any) -> Optional[Any]:
+        raise NotImplementedError("Subclasses should implement this method.")
+
+    @abc.abstractmethod
+    def update(self, dict_: dict = None, **kwargs) -> None:
+        raise NotImplementedError("Subclasses should implement this method.")
+
+    @abc.abstractmethod
+    def get(self, key: Any, default: Any = None) -> Any:
+        raise NotImplementedError("Subclasses should implement this method.")
+
+    @abc.abstractmethod
+    def clear(self) -> None:
+        raise NotImplementedError("Subclasses should implement this method.")
+
+
+class LiteralDict(Dict):
     def pop(self, key: str) -> None:
         key_nodes = self.node.value.keys
         value_nodes = self.node.value.values
@@ -141,7 +170,7 @@ class Dict:
                 isinstance(key_node, (ast.Constant, ast.Str, ast.Num))
                 and key_node.value == key
             ):
-                return value_node
+                return value_node.value
         return default
 
     def clear(self) -> None:
@@ -149,10 +178,65 @@ class Dict:
         self.node.value.values.clear()
 
 
-class List:
+class FunctionCallDict(Dict):
+    def update(self, dict_: dict = None, **kwargs) -> None:
+        if dict_ is not None:
+            for key, value in dict_.items():
+                self._update(key, value)
+        for key, value in kwargs.items():
+            self._update(key, value)
+
+    def _update(self, key: str, value: Any) -> None:
+        value_node = get_ast_node_from_value(value)
+        for i, kw in enumerate(self.node.keywords):
+            if kw.arg == key:
+                kw.value = value_node
+                return
+        self.node.keywords.append(ast.keyword(arg=key, value=value_node))
+
+    def get(self, key: Any, default: Any = None) -> Any:
+        for kw in self.node.keywords:
+            if kw.arg == key:
+                return kw.value.value
+        return default
+
+    def clear(self) -> None:
+        self.node.keywords.clear()
+
+    def pop(self, key: str) -> Optional[Any]:
+        for i, kw in enumerate(self.node.keywords):
+            if kw.arg == key:
+                value = kw.value
+                del self.node.keywords[i]
+                return value
+
+
+class List(abc.ABC):
     def __init__(self, node: ast.AST):
         self.node = node
 
+    @abc.abstractmethod
+    def pop(self, index: int) -> None:
+        raise NotImplementedError("Subclasses should implement this method.")
+
+    @abc.abstractmethod
+    def append(self, value: Any) -> None:
+        raise NotImplementedError("Subclasses should implement this method.")
+
+    @abc.abstractmethod
+    def insert(self, index: int, value: Any) -> None:
+        raise NotImplementedError("Subclasses should implement this method.")
+
+    @abc.abstractmethod
+    def remove(self, value: Any) -> None:
+        raise NotImplementedError("Subclasses should implement this method.")
+
+    def extend(self, values: list) -> None:
+        for value in values:
+            self.append(value)
+
+
+class LiteralList(List):
     def pop(self, index: int) -> None:
         value = self.node.value.elts[index]
         del self.node.value.elts[index]
@@ -160,10 +244,6 @@ class List:
 
     def append(self, value: Any) -> None:
         self.node.value.elts.append(get_ast_node_from_value(value))
-
-    def extend(self, values: list) -> None:
-        for value in values:
-            self.append(value)
 
     def insert(self, index: int, value: Any) -> None:
         self.node.value.elts.insert(index, get_ast_node_from_value(value))
@@ -182,10 +262,55 @@ class List:
         self.node.value.elts.reverse()
 
 
-class Set:
+class FunctionCallList(List):
+    def pop(self, index: int) -> None:
+        value = self.node.args[index]
+        del self.node.args[index]
+        return value
+
+    def append(self, value: Any) -> None:
+        self.node.args.append(get_ast_node_from_value(value))
+
+    def insert(self, index: int, value: Any) -> None:
+        self.node.args.insert(index, get_ast_node_from_value(value))
+
+    def remove(self, value: Any) -> None:
+        for i, elt in enumerate(self.node.args):
+            if isinstance(elt, (ast.Constant, ast.Str, ast.Num)) and elt.value == value:
+                del self.node.args[i]
+                return
+        raise ValueError(f"{value} not found in list")
+
+    def clear(self) -> None:
+        for i in range(len(self.node.args)):
+            self.pop(0)
+
+    def reverse(self) -> None:
+        self.node.args.reverse()
+
+
+class Set(abc.ABC):
     def __init__(self, node: ast.AST):
         self.node = node
 
+    @abc.abstractmethod
+    def add(self, value: Any) -> None:
+        raise NotImplementedError("Subclasses should implement this method.")
+
+    @abc.abstractmethod
+    def remove(self, value: Any) -> None:
+        raise NotImplementedError("Subclasses should implement this method.")
+
+    @abc.abstractmethod
+    def discard(self, value: Any) -> None:
+        raise NotImplementedError("Subclasses should implement this method.")
+
+    def update(self, values: list) -> None:
+        for value in values:
+            self.add(value)
+
+
+class LiteralSet(Set):
     def add(self, value: Any) -> None:
         for elt in self.node.value.elts:
             if isinstance(elt, (ast.Constant, ast.Str, ast.Num)) and elt.value == value:
@@ -199,12 +324,29 @@ class Set:
                 return
         raise KeyError(f"{value} not found in set")
 
-    def update(self, values: list) -> None:
-        for value in values:
-            self.add(value)
-
     def discard(self, value: Any) -> None:
         try:
             self.remove(value)
         except KeyError:
             pass
+
+
+class FunctionCallSet(Set):
+    def add(self, value: Any) -> None:
+        for elt in self.node.args:
+            if isinstance(elt, (ast.Constant, ast.Str, ast.Num)) and elt.value == value:
+                return
+        self.node.args.append(get_ast_node_from_value(value))
+
+    def remove(self, value: Any) -> None:
+        for i, elt in enumerate(self.node.args):
+            if isinstance(elt, (ast.Constant, ast.Str, ast.Num)) and elt.value == value:
+                del self.node.args[i]
+                return
+        raise KeyError(f"{value} not found in set")
+
+    def discard(self, value: Any) -> None:
+        for i, elt in enumerate(self.node.args):
+            if isinstance(elt, (ast.Constant, ast.Str, ast.Num)) and elt.value == value:
+                del self.node.args[i]
+                return
