@@ -41,6 +41,13 @@ def test_dict_update_with_kwargs(sample_document):
     assert "'new_key2': 456" in str(sample_document)
 
 
+def test_dict_update_with_kwargs_existing(sample_document):
+    my_dict = sample_document.find_dict('my_dict')
+    my_dict.update(new_key2=456, num=43)
+    assert "'new_key2': 456" in str(sample_document)
+    assert "'num': 43" in str(sample_document)
+
+
 def test_dict_clear(sample_document):
     my_dict = sample_document.find_dict('my_dict')
     my_dict.clear()
@@ -73,6 +80,12 @@ def test_list_remove(sample_document):
     my_list = sample_document.find_list('my_list')
     my_list.remove(2)
     assert "[1, 3, 'a']" in str(sample_document)
+
+
+def test_list_remove_non_existing_element(sample_document):
+    my_list = sample_document.find_list('my_list')
+    with pytest.raises(ValueError):
+        my_list.remove(4)
 
 
 def test_list_clear(sample_document):

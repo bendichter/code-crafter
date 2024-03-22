@@ -91,7 +91,6 @@ class Code:
                     return List(node)
                 elif isinstance(node.value, ast.Set) and node_cls == Set:
                     return Set(node)
-        return None
 
     def find_dict(self, name: str) -> "Dict":
         return self._find_node(name, Dict)
