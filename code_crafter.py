@@ -89,11 +89,11 @@ class Code:
                 # Check for dict/list/set function calls
                 if isinstance(node.value, ast.Call):
                     if node.value.func.id == 'dict' and node_cls == Dict:
-                        return FunctionCallDict(node)
+                        return FunctionCallDict(node.value)
                     if node.value.func.id == 'list' and node_cls == List:
-                        return FunctionCallList(node)
+                        return FunctionCallList(node.value)
                     if node.value.func.id == 'set' and node_cls == Set:
-                        return FunctionCallSet(node)
+                        return FunctionCallSet(node.value)
 
                 # Existing checks for literals
                 elif isinstance(node.value, ast.Dict) and node_cls == Dict:
@@ -182,16 +182,35 @@ class LiteralDict(Dict):
 class FunctionCallDict(Dict):
 
     def update(self, dict_: dict = None, **kwargs) -> None:
-        raise NotImplementedError("Not implemented for function call dict.")
+        if dict_ is not None:
+            for key, value in dict_.items():
+                self._update(key, value)
+        for key, value in kwargs.items():
+            self._update(key, value)
+
+    def _update(self, key: str, value: Any) -> None:
+        value_node = get_ast_node_from_value(value)
+        for i, kw in enumerate(self.node.keywords):
+            if kw.arg == key:
+                kw.value = value_node
+                return
+        self.node.keywords.append(ast.keyword(arg=key, value=value_node))
 
     def get(self, key: Any, default: Any = None) -> Any:
-        raise NotImplementedError("Not implemented for function call dict.")
+        for kw in self.node.keywords:
+            if kw.arg == key:
+                return kw.value
+        return default
 
     def clear(self) -> None:
-        raise NotImplementedError("Not implemented for function call dict.")
+        self.node.keywords.clear()
 
     def pop(self, key: str) -> Optional[Any]:
-        raise NotImplementedError("Not implemented for function call dict.")
+        for i, kw in enumerate(self.node.keywords):
+            if kw.arg == key:
+                value = kw.value
+                del self.node.keywords[i]
+                return value
 
 
 class List(abc.ABC):
@@ -207,16 +226,16 @@ class List(abc.ABC):
         raise NotImplementedError("Subclasses should implement this method.")
 
     @abc.abstractmethod
-    def extend(self, values: list) -> None:
-        raise NotImplementedError("Subclasses should implement this method.")
-
-    @abc.abstractmethod
     def insert(self, index: int, value: Any) -> None:
         raise NotImplementedError("Subclasses should implement this method.")
 
     @abc.abstractmethod
     def remove(self, value: Any) -> None:
         raise NotImplementedError("Subclasses should implement this method.")
+
+    def extend(self, values: list) -> None:
+        for value in values:
+            self.append(value)
 
 
 class LiteralList(List):
@@ -228,10 +247,6 @@ class LiteralList(List):
 
     def append(self, value: Any) -> None:
         self.node.value.elts.append(get_ast_node_from_value(value))
-
-    def extend(self, values: list) -> None:
-        for value in values:
-            self.append(value)
 
     def insert(self, index: int, value: Any) -> None:
         self.node.value.elts.insert(index, get_ast_node_from_value(value))
@@ -253,26 +268,29 @@ class LiteralList(List):
 class FunctionCallList(List):
 
         def pop(self, index: int) -> None:
-            raise NotImplementedError("Not implemented for function call list.")
+            value = self.node.args[index]
+            del self.node.args[index]
+            return value
 
         def append(self, value: Any) -> None:
-            raise NotImplementedError("Not implemented for function call list.")
-
-        def extend(self, values: list) -> None:
-            raise NotImplementedError("Not implemented for function call list.")
+            self.node.args.append(get_ast_node_from_value(value))
 
         def insert(self, index: int, value: Any) -> None:
-            raise NotImplementedError("Not implemented for function call list.")
+            self.node.args.insert(index, get_ast_node_from_value(value))
 
         def remove(self, value: Any) -> None:
-            raise NotImplementedError("Not implemented for function call list.")
+            for i, elt in enumerate(self.node.args):
+                if isinstance(elt, (ast.Constant, ast.Str, ast.Num)) and elt.value == value:
+                    del self.node.args[i]
+                    return
+            raise ValueError(f"{value} not found in list")
 
         def clear(self) -> None:
-            raise NotImplementedError("Not implemented for function call list.")
+            for i in range(len(self.node.args)):
+                self.pop(0)
 
         def reverse(self) -> None:
-            raise NotImplementedError("Not implemented for function call list.")
-
+            self.node.args.reverse()
 
 class Set(abc.ABC):
     def __init__(self, node: ast.AST):
@@ -287,12 +305,12 @@ class Set(abc.ABC):
         raise NotImplementedError("Subclasses should implement this method.")
 
     @abc.abstractmethod
-    def update(self, values: list) -> None:
-        raise NotImplementedError("Subclasses should implement this method.")
-
-    @abc.abstractmethod
     def discard(self, value: Any) -> None:
         raise NotImplementedError("Subclasses should implement this method.")
+
+    def update(self, values: list) -> None:
+        for value in values:
+            self.add(value)
 
 
 class LiteralSet(Set):
@@ -310,10 +328,6 @@ class LiteralSet(Set):
                 return
         raise KeyError(f"{value} not found in set")
 
-    def update(self, values: list) -> None:
-        for value in values:
-            self.add(value)
-
     def discard(self, value: Any) -> None:
         try:
             self.remove(value)
@@ -324,13 +338,20 @@ class LiteralSet(Set):
 class FunctionCallSet(Set):
 
         def add(self, value: Any) -> None:
-            raise NotImplementedError("Not implemented for function call list.")
+            for elt in self.node.args:
+                if isinstance(elt, (ast.Constant, ast.Str, ast.Num)) and elt.value == value:
+                    return
+            self.node.args.append(get_ast_node_from_value(value))
 
         def remove(self, value: Any) -> None:
-            raise NotImplementedError("Not implemented for function call list.")
-
-        def update(self, values: list) -> None:
-            raise NotImplementedError("Not implemented for function call list.")
+            for i, elt in enumerate(self.node.args):
+                if isinstance(elt, (ast.Constant, ast.Str, ast.Num)) and elt.value == value:
+                    del self.node.args[i]
+                    return
+            raise KeyError(f"{value} not found in set")
 
         def discard(self, value: Any) -> None:
-            raise NotImplementedError("Not implemented for function call list.")
+            for i, elt in enumerate(self.node.args):
+                if isinstance(elt, (ast.Constant, ast.Str, ast.Num)) and elt.value == value:
+                    del self.node.args[i]
+                    return
