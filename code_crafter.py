@@ -82,17 +82,17 @@ class Code:
         """Generic method to find and return a specific type of node."""
         for node in ast.walk(self.tree):
             if (
-                    isinstance(node, ast.Assign)
-                    and isinstance(node.targets[0], ast.Name)
-                    and node.targets[0].id == name
+                isinstance(node, ast.Assign)
+                and isinstance(node.targets[0], ast.Name)
+                and node.targets[0].id == name
             ):
                 # Check for dict/list/set function calls
                 if isinstance(node.value, ast.Call):
-                    if node.value.func.id == 'dict' and node_cls == Dict:
+                    if node.value.func.id == "dict" and node_cls == Dict:
                         return FunctionCallDict(node.value)
-                    if node.value.func.id == 'list' and node_cls == List:
+                    if node.value.func.id == "list" and node_cls == List:
                         return FunctionCallList(node.value)
-                    if node.value.func.id == 'set' and node_cls == Set:
+                    if node.value.func.id == "set" and node_cls == Set:
                         return FunctionCallSet(node.value)
 
                 # Existing checks for literals
@@ -138,7 +138,6 @@ class Dict(abc.ABC):
 
 
 class LiteralDict(Dict):
-
     def pop(self, key: str) -> None:
         key_nodes = self.node.value.keys
         value_nodes = self.node.value.values
@@ -180,7 +179,6 @@ class LiteralDict(Dict):
 
 
 class FunctionCallDict(Dict):
-
     def update(self, dict_: dict = None, **kwargs) -> None:
         if dict_ is not None:
             for key, value in dict_.items():
@@ -239,7 +237,6 @@ class List(abc.ABC):
 
 
 class LiteralList(List):
-
     def pop(self, index: int) -> None:
         value = self.node.value.elts[index]
         del self.node.value.elts[index]
@@ -266,31 +263,31 @@ class LiteralList(List):
 
 
 class FunctionCallList(List):
+    def pop(self, index: int) -> None:
+        value = self.node.args[index]
+        del self.node.args[index]
+        return value
 
-        def pop(self, index: int) -> None:
-            value = self.node.args[index]
-            del self.node.args[index]
-            return value
+    def append(self, value: Any) -> None:
+        self.node.args.append(get_ast_node_from_value(value))
 
-        def append(self, value: Any) -> None:
-            self.node.args.append(get_ast_node_from_value(value))
+    def insert(self, index: int, value: Any) -> None:
+        self.node.args.insert(index, get_ast_node_from_value(value))
 
-        def insert(self, index: int, value: Any) -> None:
-            self.node.args.insert(index, get_ast_node_from_value(value))
+    def remove(self, value: Any) -> None:
+        for i, elt in enumerate(self.node.args):
+            if isinstance(elt, (ast.Constant, ast.Str, ast.Num)) and elt.value == value:
+                del self.node.args[i]
+                return
+        raise ValueError(f"{value} not found in list")
 
-        def remove(self, value: Any) -> None:
-            for i, elt in enumerate(self.node.args):
-                if isinstance(elt, (ast.Constant, ast.Str, ast.Num)) and elt.value == value:
-                    del self.node.args[i]
-                    return
-            raise ValueError(f"{value} not found in list")
+    def clear(self) -> None:
+        for i in range(len(self.node.args)):
+            self.pop(0)
 
-        def clear(self) -> None:
-            for i in range(len(self.node.args)):
-                self.pop(0)
+    def reverse(self) -> None:
+        self.node.args.reverse()
 
-        def reverse(self) -> None:
-            self.node.args.reverse()
 
 class Set(abc.ABC):
     def __init__(self, node: ast.AST):
@@ -314,7 +311,6 @@ class Set(abc.ABC):
 
 
 class LiteralSet(Set):
-
     def add(self, value: Any) -> None:
         for elt in self.node.value.elts:
             if isinstance(elt, (ast.Constant, ast.Str, ast.Num)) and elt.value == value:
@@ -336,22 +332,21 @@ class LiteralSet(Set):
 
 
 class FunctionCallSet(Set):
+    def add(self, value: Any) -> None:
+        for elt in self.node.args:
+            if isinstance(elt, (ast.Constant, ast.Str, ast.Num)) and elt.value == value:
+                return
+        self.node.args.append(get_ast_node_from_value(value))
 
-        def add(self, value: Any) -> None:
-            for elt in self.node.args:
-                if isinstance(elt, (ast.Constant, ast.Str, ast.Num)) and elt.value == value:
-                    return
-            self.node.args.append(get_ast_node_from_value(value))
+    def remove(self, value: Any) -> None:
+        for i, elt in enumerate(self.node.args):
+            if isinstance(elt, (ast.Constant, ast.Str, ast.Num)) and elt.value == value:
+                del self.node.args[i]
+                return
+        raise KeyError(f"{value} not found in set")
 
-        def remove(self, value: Any) -> None:
-            for i, elt in enumerate(self.node.args):
-                if isinstance(elt, (ast.Constant, ast.Str, ast.Num)) and elt.value == value:
-                    del self.node.args[i]
-                    return
-            raise KeyError(f"{value} not found in set")
-
-        def discard(self, value: Any) -> None:
-            for i, elt in enumerate(self.node.args):
-                if isinstance(elt, (ast.Constant, ast.Str, ast.Num)) and elt.value == value:
-                    del self.node.args[i]
-                    return
+    def discard(self, value: Any) -> None:
+        for i, elt in enumerate(self.node.args):
+            if isinstance(elt, (ast.Constant, ast.Str, ast.Num)) and elt.value == value:
+                del self.node.args[i]
+                return
