@@ -1,5 +1,8 @@
 # Code Crafter
 
+[![codecov](https://codecov.io/gh/bendichter/code-crafter/graph/badge.svg?token=RT0OSBH124)](https://codecov.io/gh/bendichter/code-crafter)
+![PyPI - Python Version](https://img.shields.io/pypi/pyversions/code-crafter)
+
 Code Crafter is a Python library designed for manipulating Python source code through Abstract Syntax Tree (AST) transformations. This tool simplifies the process of programmatically editing Python code, allowing developers to find and modify specific data structures such as lists, dictionaries, and sets within their code. Whether you're building code generation tools, refactoring code, or creating dynamic Python scripts, Code Crafter offers a clean and intuitive API to achieve your goals.
 
 ## Features
